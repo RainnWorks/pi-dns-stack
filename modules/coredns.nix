@@ -2,20 +2,20 @@
 
 {
   environment.etc."coredns/Corefile".text = ''
-    ${cfg.domain}:53 {
-        template IN A {
-            match ^(.*)\.${cfg.domain}\.$
-            answer "{{ .Name }} 60 IN A ${cfg.localIP}"
-        }
-        errors
-        cache 60
+${cfg.domain}:53 {
+    template IN A {
+        match ^(.*)\.${cfg.domain}\.$
+        answer "{{ .Name }} 60 IN A ${cfg.localIP}"
     }
+    errors
+    cache 60
+}
 
-    .:53 {
-        forward . 127.0.0.1:5353
-        cache 300
-        errors
-    }
+.:53 {
+    forward . 127.0.0.1:5353
+    cache 300
+    errors
+}
   '';
 
   services.coredns = {
