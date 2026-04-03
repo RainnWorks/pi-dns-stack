@@ -19,6 +19,7 @@
         cache_size = 8388608;
         cache_ttl_min = 0;
         cache_ttl_max = 0;
+        use_private_ptr_resolvers = false;
       };
       filtering = {
         protection_enabled = true;
