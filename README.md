@@ -8,9 +8,10 @@ Copy the example config and fill in your details:
 
 ```sh
 cp config.example.nix config.local.nix
+git add -N config.local.nix
 ```
 
-Edit `config.local.nix` with your local domain, IP, SSH key, and timezone. This file is gitignored — the stack reads from it automatically.
+Edit `config.local.nix` with your local domain, IP, SSH key, and timezone. This file is gitignored but must be registered with `git add -N` for Nix flakes to see it (the content is never committed).
 
 You may also want to edit:
 
