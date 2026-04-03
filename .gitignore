@@ -6,3 +6,4 @@ flake.lock
 *.img.zst
 *.tar
 *.tar.gz
+.claude/
