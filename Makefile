@@ -1,20 +1,21 @@
 HOST ?= dns1
-VALID_HOSTS := dns1 dns2
+VALID_HOSTS := dns1 dns2 kitchen-music
 PROJECT_DIR := /mnt/mac$(shell pwd)
 OUTPUT_DIR := $(shell pwd)/out
 VM_NAME := nixbuilder
 NIX := . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
 
 IP ?=
-.PHONY: setup build flash test clean help
+.PHONY: setup build flash deploy test clean help
 
 help:
 	@echo "Usage:"
-	@echo "  make setup           - Create OrbStack VM and install Nix"
-	@echo "  make build HOST=dns1 - Build SD image"
-	@echo "  make flash HOST=dns1 - Flash SD image to card"
-	@echo "  make test IP=x.x.x.x - Run health checks"
-	@echo "  make clean           - Remove built images"
+	@echo "  make setup            - Create OrbStack VM and install Nix"
+	@echo "  make build HOST=dns1  - Build SD image"
+	@echo "  make flash HOST=dns1  - Flash SD image to card"
+	@echo "  make deploy HOST=dns1 - Push config to running node over SSH (no reflash)"
+	@echo "  make test IP=x.x.x.x  - Run health checks"
+	@echo "  make clean            - Remove built images"
 
 setup:
 	@./scripts/setup.sh
@@ -40,6 +41,10 @@ flash:
 		exit 1; \
 	fi
 	@./scripts/flash.sh $(HOST)
+
+deploy:
+	$(if $(filter $(HOST),$(VALID_HOSTS)),,$(error Unknown host '$(HOST)'. Valid: $(VALID_HOSTS)))
+	@./scripts/deploy.sh $(HOST) $(IP)
 
 test:
 	$(if $(IP),,$(error Usage: make test IP=x.x.x.x))

@@ -1,6 +1,6 @@
 # pi-dns-stack
 
-Network-wide ad blocking and local DNS for the home network, running on Raspberry Pi Zero 2 W devices with NixOS.
+Network-wide ad blocking and local DNS for the home network, running on Raspberry Pi devices with NixOS. Two Pi Zero 2 W nodes (`dns1`, `dns2`) handle DNS exclusively; a third Pi 4 node (`kitchen-music`) also runs Music Assistant with a HiFiBerry Amp4 for whole-home audio.
 
 ## Making it yours
 
@@ -18,7 +18,7 @@ You may also want to edit:
 | File | What to change |
 |------|---------------|
 | `modules/adguardhome.nix` | Filter lists and whitelist rules |
-| `hosts/dns1.nix`, `hosts/dns2.nix` | Hostnames for your nodes |
+| `hosts/dns1.nix`, `hosts/dns2.nix`, `hosts/kitchen-music.nix` | Hostnames for your nodes |
 | `flake.nix` | Add or remove nodes |
 
 Everything else should work out of the box on a Pi Zero 2 W with a Waveshare PoE/ETH/USB HAT.
@@ -68,31 +68,44 @@ NTP servers are configured by IP address to avoid a chicken-and-egg problem — 
 
 ## Hardware
 
-- **Raspberry Pi Zero 2 W** (512MB RAM, quad-core ARM)
-- **Waveshare PoE/ETH/USB HUB HAT** for ethernet + power-over-ethernet
-- Runs entirely from an SD card with tmpfs for logs (no SD card wear)
+- **dns1, dns2** — Raspberry Pi Zero 2 W (512MB RAM, quad-core ARM) + Waveshare PoE/ETH/USB HUB HAT for ethernet + power-over-ethernet. Runs entirely from an SD card with tmpfs for logs (no SD card wear).
+- **kitchen-music** — Raspberry Pi 4 + HiFiBerry Amp4. Runs the same DNS stack plus Music Assistant; persistent state (MA library/config) lives on the SD card.
 
 ## Project structure
 
 ```
-flake.nix              # Nix flake defining dns1 and dns2 nodes
-config.example.nix     # Example config (copy to config.nix)
+flake.nix                       # Defines dns1, dns2, kitchen-music nodes
+config.example.nix              # Example config (copy to config.local.nix)
 hosts/
-  dns1.nix             # Per-host config (hostname, DHCP)
-  dns2.nix
+  dns1.nix                      # Pi Zero 2 W + DNS
+  dns2.nix                      # Pi Zero 2 W + DNS
+  kitchen-music.nix             # Pi 4 + HiFiBerry Amp4 + DNS + Spotify + AirPlay
 modules/
-  dns-node.nix         # Base system (networking, SSH, NTP, users)
-  hardware.nix         # Pi Zero 2 W kernel, device tree, firmware
-  unbound.nix          # Recursive DNS resolver (port 5335)
-  adguardhome.nix      # Ad blocking + filter lists (port 5353)
-  coredns.nix          # Frontend DNS + local domains (port 53)
+  base.nix                      # Universal host config (SSH, NTP, users, sudo, journald, tmpfs)
+  hardware/
+    pi-zero2w.nix               # Pi Zero 2 W (pulls in base.nix transitively)
+    pi4.nix                     # Pi 4 (pulls in base.nix transitively)
+    hifiberry-amp4.nix          # HAT add-on: pre-merged DTB, ALSA modules, asound default
+    _shared/
+      rpi-base.nix              # Internal: shared rpi boot scaffolding
+  dns/
+    stack.nix                   # Composes the trio + nameservers + DNS firewall
+    coredns.nix                   # Frontend DNS + local domains (port 53)
+    adguardhome.nix               # Ad blocking + filter lists (port 5353)
+    unbound.nix                   # Recursive DNS resolver (port 5335)
+  audio/
+    spotify-connect.nix         # spotifyd (Spotify Connect endpoint)
+    airplay.nix                 # shairport-sync (AirPlay receiver)
 scripts/
-  setup.sh             # Create OrbStack build VM + install Nix
-  build.sh             # Build SD card image
-  flash.sh             # Flash image to SD card (with safety checks)
-  test.sh              # Run health checks against a node
-Makefile               # Convenience wrapper
+  setup.sh                      # Create OrbStack build VM + install Nix
+  build.sh                      # Build SD card image
+  flash.sh                      # Flash image to SD card (with safety checks)
+  deploy.sh                     # Push config to a running node over SSH (no reflash)
+  test.sh                       # Run health checks against a node
+Makefile                        # Convenience wrapper
 ```
+
+Hosts compose modules like recipes — `kitchen-music.nix` is just an `imports` list pulling from `base`, `hardware/`, `dns/`, and `audio/`. Adding a future `bedroom-music` is "copy kitchen-music.nix, change hostname, done".
 
 ## Usage
 

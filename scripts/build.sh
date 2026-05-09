@@ -2,7 +2,7 @@
 set -euo pipefail
 
 HOST="${1:-}"
-VALID_HOSTS=(dns1 dns2)
+VALID_HOSTS=(dns1 dns2 kitchen-music)
 PROJECT_DIR="/mnt/mac$(pwd)"
 OUTPUT_DIR="$(pwd)/out"
 

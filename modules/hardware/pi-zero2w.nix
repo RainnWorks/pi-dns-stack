@@ -1,21 +1,7 @@
-{ pkgs, lib, modulesPath, ... }:
+{ pkgs, lib, ... }:
 
 {
-  imports = [
-    "${modulesPath}/installer/sd-card/sd-image-aarch64.nix"
-  ];
-
-  nixpkgs.hostPlatform = "aarch64-linux";
-
-  nixpkgs.overlays = [
-    (final: super: {
-      makeModulesClosure = x: super.makeModulesClosure (x // { allowMissing = true; });
-    })
-  ];
-
-  boot.loader.grub.enable = false;
-  boot.loader.generic-extlinux-compatible.enable = true;
-  boot.swraid.enable = lib.mkForce false;
+  imports = [ ./_shared/rpi-base.nix ];
 
   boot.kernelPackages = pkgs.linuxPackages_rpi02w;
   boot.initrd.availableKernelModules = [ "xhci_pci" "usbhid" "usb_storage" "r8152" ];
@@ -25,8 +11,6 @@
     enable = true;
     filter = "*rpi-zero-2*";
   };
-
-  hardware.enableRedistributableFirmware = lib.mkForce false;
 
   sdImage.populateFirmwareCommands = lib.mkAfter ''
     chmod u+w firmware/config.txt
