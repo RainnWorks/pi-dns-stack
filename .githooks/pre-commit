@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Refuse to commit config.local.nix — it's per-machine config that should
+# never enter the repo. The 'git add -N' entry you see in `git status` is
+# intentional: it gives the Nix flake evaluator a path to import while
+# keeping the file's content local-only.
+#
+# Activated via `core.hooksPath = .githooks` (set by `make init`).
+
+if git diff --cached --quiet -- config.local.nix 2>/dev/null; then
+  # No staged content changes (intent-to-add registrations have no content
+  # diff). Fine to commit.
+  exit 0
+fi
+
+cat <<'EOF'
+ERROR: refusing to commit config.local.nix
+
+This file is per-machine config and should never be committed. The
+'git add -N' entry that shows in `git status` is intentional — it lets
+the Nix flake see the file path while leaving its content local-only.
+
+Unstage it:
+  git restore --staged config.local.nix
+
+If you really mean to commit it (you almost certainly don't):
+  git commit --no-verify
+
+EOF
+exit 1

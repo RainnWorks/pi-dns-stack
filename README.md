@@ -4,14 +4,13 @@ Network-wide ad blocking and local DNS for the home network, running on Raspberr
 
 ## Making it yours
 
-Copy the example config and fill in your details:
+One-time setup:
 
 ```sh
-cp config.example.nix config.local.nix
-git add -N config.local.nix
+make init
 ```
 
-Edit `config.local.nix` with your local domain, IP, SSH key, and timezone. This file is gitignored but must be registered with `git add -N` for Nix flakes to see it (the content is never committed).
+That copies `config.example.nix` → `config.local.nix`, registers it with `git add -N` (so Nix flakes can see the path while keeping the content local-only), and installs a pre-commit hook that refuses to ever commit it. Then edit `config.local.nix` with your local domain, IP, SSH key, and timezone.
 
 You may also want to edit:
 
