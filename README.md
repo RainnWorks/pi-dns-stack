@@ -93,6 +93,8 @@ modules/
     adguardhome.nix               # Ad blocking + filter lists (port 5353)
     unbound.nix                   # Recursive DNS resolver (port 5335)
   observability.nix             # Prometheus node_exporter (system + per-service health)
+docs/
+  home-assistant-prometheus.md  # End-to-end recipe for surfacing metrics in HA
   audio/
     spotify-connect.nix         # spotifyd (Spotify Connect endpoint)
     airplay.nix                 # shairport-sync (AirPlay receiver)
