@@ -2,9 +2,10 @@
   imports = [
     ../modules/hardware/pi4.nix
     ../modules/hardware/hifiberry-amp4.nix
-    ../modules/dns/stack.nix
+    ../modules/dns
     ../modules/audio/spotify-connect.nix
     ../modules/audio/airplay.nix
+    ../modules/observability.nix
   ];
 
   networking.hostName = "kitchen-music";

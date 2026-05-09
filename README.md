@@ -88,10 +88,11 @@ modules/
     _shared/
       rpi-base.nix              # Internal: shared rpi boot scaffolding
   dns/
-    stack.nix                   # Composes the trio + nameservers + DNS firewall
+    default.nix                 # Barrel: composes the trio + nameservers + DNS firewall
     coredns.nix                   # Frontend DNS + local domains (port 53)
     adguardhome.nix               # Ad blocking + filter lists (port 5353)
     unbound.nix                   # Recursive DNS resolver (port 5335)
+  observability.nix             # Prometheus node_exporter (system + per-service health)
   audio/
     spotify-connect.nix         # spotifyd (Spotify Connect endpoint)
     airplay.nix                 # shairport-sync (AirPlay receiver)

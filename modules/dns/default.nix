@@ -17,4 +17,10 @@
     allowedTCPPorts = [ 53 3000 ];
     allowedUDPPorts = [ 53 ];
   };
+
+  # Expose health of the trio via Prometheus node_exporter's systemd
+  # collector (see modules/observability.nix). Audio services are
+  # deliberately left out — HA has better-suited integrations (Spotify,
+  # AirPlay) for the playback-state side of things.
+  observability.monitoredServices = [ "coredns" "adguardhome" "unbound" ];
 }
