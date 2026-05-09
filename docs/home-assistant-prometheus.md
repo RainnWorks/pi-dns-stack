@@ -1,31 +1,185 @@
-# Home Assistant + Prometheus integration
+# Home Assistant — Pi metrics as entities
 
-End-to-end recipe for getting metrics from this repo's Pis (and HA itself) into HA dashboards via Prometheus.
+Each Pi exposes Prometheus-format metrics on `:9100` already (`modules/observability.nix`). The simplest path is to have HA scrape those endpoints directly — no Prometheus server needed.
 
-## Architecture
+## What you get
 
+For each Pi: CPU temperature, available RAM, uptime, and a `binary_sensor` per monitored service. ~20 entities for the current 3-Pi setup, viewable on a Lovelace dashboard, usable in automations ("notify me if dns1.coredns goes down").
+
+## Setup
+
+Drop the following into HA's `configuration.yaml` (or split into packages if you prefer). Adjust IPs as needed.
+
+### System metrics — `command_line` sensors
+
+```yaml
+sensor:
+  # CPU temperature (°C). awk grabs the first thermal_zone reading.
+  - platform: command_line
+    name: dns1 cpu temp
+    command: >
+      curl -s --max-time 5 http://192.168.96.45:9100/metrics
+      | awk '/^node_thermal_zone_temp{/ {print $NF; exit}'
+    unit_of_measurement: "°C"
+    scan_interval: 60
+
+  - platform: command_line
+    name: dns2 cpu temp
+    command: >
+      curl -s --max-time 5 http://192.168.96.60:9100/metrics
+      | awk '/^node_thermal_zone_temp{/ {print $NF; exit}'
+    unit_of_measurement: "°C"
+    scan_interval: 60
+
+  - platform: command_line
+    name: kitchen-music cpu temp
+    command: >
+      curl -s --max-time 5 http://192.168.96.157:9100/metrics
+      | awk '/^node_thermal_zone_temp{/ {print $NF; exit}'
+    unit_of_measurement: "°C"
+    scan_interval: 60
+
+  # Available RAM (MB).
+  - platform: command_line
+    name: dns1 ram available
+    command: >
+      curl -s --max-time 5 http://192.168.96.45:9100/metrics
+      | awk '/^node_memory_MemAvailable_bytes/ {printf "%.0f", $NF/1024/1024; exit}'
+    unit_of_measurement: "MB"
+    scan_interval: 60
+
+  # Uptime (seconds since boot — derived from now - boot_time).
+  - platform: command_line
+    name: dns1 uptime
+    command: >
+      curl -s --max-time 5 http://192.168.96.45:9100/metrics
+      | awk '/^node_time_seconds / {now=$NF} /^node_boot_time_seconds / {boot=$NF} END {printf "%.0f", now-boot}'
+    unit_of_measurement: "s"
+    device_class: duration
+    scan_interval: 300
 ```
-   Pis (node_exporter :9100)         HA (built-in /api/prometheus)
-              │                                  │
-              └─────────────┬────────────────────┘
-                            ▼
-                    Prometheus (Tower :9090)
-                            │
-              ┌─────────────┴────────────────────┐
-              ▼                                  ▼
-        Grafana (optional)             HA `command_line` sensors
-        for dashboards                 for entities + automations
+
+### Service health — `binary_sensor` per service
+
+`node_exporter`'s systemd collector emits one row per (service × state). Match the `name="X.service",state="active"` row and grab the value (1 = active, 0 = otherwise).
+
+```yaml
+binary_sensor:
+  # dns1 — DNS trio
+  - platform: command_line
+    name: dns1 coredns
+    command: >
+      curl -s --max-time 5 http://192.168.96.45:9100/metrics
+      | grep -m1 '^node_systemd_unit_state{name="coredns.service",state="active"'
+      | awk '{print $NF}'
+    payload_on: "1"
+    payload_off: "0"
+    device_class: running
+    scan_interval: 30
+
+  - platform: command_line
+    name: dns1 adguardhome
+    command: >
+      curl -s --max-time 5 http://192.168.96.45:9100/metrics
+      | grep -m1 '^node_systemd_unit_state{name="adguardhome.service",state="active"'
+      | awk '{print $NF}'
+    payload_on: "1"
+    payload_off: "0"
+    device_class: running
+    scan_interval: 30
+
+  - platform: command_line
+    name: dns1 unbound
+    command: >
+      curl -s --max-time 5 http://192.168.96.45:9100/metrics
+      | grep -m1 '^node_systemd_unit_state{name="unbound.service",state="active"'
+      | awk '{print $NF}'
+    payload_on: "1"
+    payload_off: "0"
+    device_class: running
+    scan_interval: 30
 ```
 
-- **node_exporter** is already running on every Pi via `modules/observability.nix` — exposes `:9100/metrics`. No changes here.
-- **Prometheus** runs as a single container on Tower, scrapes every endpoint on a schedule, stores metrics for the configured retention window.
-- **HA** publishes its own state at `https://hass.local:8123/api/prometheus` once the integration is enabled — Prometheus scrapes that too.
-- **Grafana** is the standard way to visualize. Skip it for the first pass; add it once you have data flowing.
-- **HA sensors** for individual values you want as entities (binary_sensor, gauge etc.) — pull from Prometheus's HTTP query API.
+Repeat the trio for `dns2` (`192.168.96.60`) and `kitchen-music` (`192.168.96.157`). Same pattern.
 
-## 1. Tower side: add Prometheus to the stack
+### A quick reachability binary_sensor (no node_exporter needed)
 
-In `thenairn.com`'s docker-compose, add:
+For the simplest "is the box up?" check, ping it:
+
+```yaml
+binary_sensor:
+  - platform: ping
+    name: dns1
+    host: 192.168.96.45
+    count: 2
+    scan_interval: 30
+```
+
+(Built-in HA integration; don't even need to scrape the metrics endpoint for this.)
+
+## Lovelace example
+
+```yaml
+type: vertical-stack
+cards:
+  - type: entities
+    title: dns1
+    entities:
+      - binary_sensor.dns1
+      - binary_sensor.dns1_coredns
+      - binary_sensor.dns1_adguardhome
+      - binary_sensor.dns1_unbound
+      - sensor.dns1_cpu_temp
+      - sensor.dns1_ram_available
+      - sensor.dns1_uptime
+```
+
+Repeat per host.
+
+## Automations
+
+Once these entities exist, the obvious wins:
+
+```yaml
+automation:
+  - alias: Notify if dns resolver down
+    trigger:
+      - platform: state
+        entity_id:
+          - binary_sensor.dns1_coredns
+          - binary_sensor.dns2_coredns
+        to: "off"
+        for: "00:01:00"   # debounce against transient blips
+    action:
+      - service: notify.mobile_app_<your_device>
+        data:
+          message: "{{ trigger.entity_id }} is down"
+
+  - alias: Warn on Pi temperature
+    trigger:
+      - platform: numeric_state
+        entity_id:
+          - sensor.dns1_cpu_temp
+          - sensor.dns2_cpu_temp
+          - sensor.kitchen_music_cpu_temp
+        above: 75
+    action:
+      - service: persistent_notification.create
+        data:
+          message: "{{ trigger.entity_id }} hit {{ trigger.to_state.state }}°C"
+```
+
+## Trade-offs vs. running Prometheus
+
+You don't get: long-term history (HA recorder is ~10 days vs Prometheus 30+), PromQL/aggregations, Grafana dashboards, alert routing via Alertmanager. For a 3-Pi homelab, you almost certainly don't care about any of that yet.
+
+**If you ever do care**, the upgrade path is non-destructive: stand up Prometheus on Tower (snippet at the bottom), point it at the same `:9100` endpoints, and your HA sensors keep working. Grafana then layers on for proper dashboards.
+
+---
+
+## Appendix: upgrading to Prometheus + Grafana later
+
+If/when you want history + dashboards, add Prometheus to `thenairn.com`'s docker-compose:
 
 ```yaml
 prometheus:
@@ -36,155 +190,29 @@ prometheus:
     - '--config.file=/etc/prometheus/prometheus.yml'
     - '--storage.tsdb.retention.time=30d'
     - '--storage.tsdb.path=/prometheus'
-    - '--web.enable-lifecycle'   # for `curl -X POST :9090/-/reload`
+    - '--web.enable-lifecycle'
   volumes:
     - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     - prometheus_data:/prometheus
   ports:
     - "9090:9090"
-  networks:
-    - default
 ```
 
-And in your volumes section:
-
-```yaml
-volumes:
-  prometheus_data:
-```
-
-Then create `./prometheus/prometheus.yml`:
+`./prometheus/prometheus.yml`:
 
 ```yaml
 global:
   scrape_interval: 30s
-  evaluation_interval: 30s
 
 scrape_configs:
-  # The three Pis running node_exporter. Same module, same :9100.
   - job_name: 'homelab-pis'
     static_configs:
       - targets:
-          - '192.168.96.45:9100'    # dns1
-          - '192.168.96.60:9100'    # dns2
-          - '192.168.96.157:9100'   # kitchen-music
-        labels:
-          environment: 'homelab'
-
-  # Home Assistant — exports its own state when the prometheus integration
-  # is enabled. Replace with your HA host/IP.
-  - job_name: 'home-assistant'
-    metrics_path: /api/prometheus
-    bearer_token: 'YOUR_LONG_LIVED_ACCESS_TOKEN'
-    static_configs:
-      - targets:
-          - '192.168.96.15:8123'    # adjust if HA is elsewhere
+          - '192.168.96.45:9100'
+          - '192.168.96.60:9100'
+          - '192.168.96.157:9100'
 ```
 
-### Generate HA's bearer token
+Add Grafana the same way (port 3001 — 3000 conflicts with AdGuard's UI), point it at `http://prometheus:9090`, import dashboard 1860 (Node Exporter Full).
 
-In HA UI: **Profile → Security → Long-Lived Access Tokens → Create Token**. Paste the result into `bearer_token` above. Don't commit it; keep that file out of git.
-
-### Sanity check after `docker compose up -d prometheus`
-
-- Visit `http://tower.thenairn.com:9090/targets` (or `:9090/targets` directly). All four targets should be `UP`.
-- If a Pi shows `DOWN`, check that node_exporter is reachable: `curl http://192.168.96.45:9100/metrics | head`.
-- If HA is `DOWN`, double-check the bearer token and that `prometheus:` is in HA's `configuration.yaml` (next section).
-
-## 2. HA side: enable the built-in Prometheus integration
-
-In `configuration.yaml`:
-
-```yaml
-prometheus:
-  namespace: hass
-  filter:
-    # Optional: scope what gets exposed. Default is everything, which is
-    # fine for a homelab. Comment this out to expose all entities.
-    include_domains:
-      - sensor
-      - binary_sensor
-      - climate
-      - light
-      - switch
-      - device_tracker
-```
-
-Restart HA. Verify with:
-
-```sh
-curl -H "Authorization: Bearer YOUR_TOKEN" http://192.168.96.15:8123/api/prometheus | head -20
-```
-
-Should return Prometheus-format metrics (`hass_sensor_value{...}`, etc.).
-
-## 3. HA-side sensors for headline metrics
-
-This is where you decide what's worth being a *first-class HA entity* (vs. just-visible-in-Grafana). Examples:
-
-```yaml
-# configuration.yaml — add to existing `sensor:` and `binary_sensor:` lists.
-
-sensor:
-  # CPU temperature on each Pi.
-  - platform: command_line
-    name: kitchen_music_cpu_temp
-    command: >
-      curl -s 'http://tower.thenairn.com:9090/api/v1/query?query=node_thermal_zone_temp{instance="192.168.96.157:9100"}'
-      | jq -r '.data.result[0].value[1] // "unavailable"'
-    unit_of_measurement: "°C"
-    scan_interval: 60
-
-  - platform: command_line
-    name: dns1_cpu_temp
-    command: >
-      curl -s 'http://tower.thenairn.com:9090/api/v1/query?query=node_thermal_zone_temp{instance="192.168.96.45:9100"}'
-      | jq -r '.data.result[0].value[1] // "unavailable"'
-    unit_of_measurement: "°C"
-    scan_interval: 60
-
-binary_sensor:
-  # Per-service health for the DNS trio.
-  - platform: command_line
-    name: dns1_coredns_active
-    command: >
-      curl -s 'http://tower.thenairn.com:9090/api/v1/query?query=node_systemd_unit_state{instance="192.168.96.45:9100",name="coredns.service",state="active"}'
-      | jq -r '.data.result[0].value[1] // "0"'
-    payload_on: "1"
-    payload_off: "0"
-    device_class: running
-    scan_interval: 30
-```
-
-Repeat for each `(host, service)` you care about. Or — far cleaner — once you have a handful of these, switch to a **template** that loops over them. Or use the **HACS `prometheus_sensor`** integration, which is purpose-built for this.
-
-## 4. Optional: Grafana for real dashboards
-
-Add to docker-compose:
-
-```yaml
-grafana:
-  image: grafana/grafana:latest
-  container_name: grafana
-  restart: unless-stopped
-  volumes:
-    - grafana_data:/var/lib/grafana
-  ports:
-    - "3001:3000"   # 3000 conflicts with AdGuard's UI on the Pis
-  networks:
-    - default
-```
-
-Add Prometheus as a data source: `http://prometheus:9090` (from inside the docker network). Import the official dashboards:
-
-- **1860** — Node Exporter Full (the canonical Pi/server dashboard)
-- **15983** — Home Assistant overview
-
-Optionally, embed Grafana into HA via the *Iframe Card* on a Lovelace dashboard.
-
-## Things this doesn't cover (yet)
-
-- **Alerting** — Alertmanager could send notifications (HA, ntfy, etc.) when something goes off. Add only when you find yourself wishing for it.
-- **Long-term storage** — Prometheus's local TSDB is fine for 30 days; if you want years, look at VictoriaMetrics or Mimir.
-- **Cardinality control** — `hass_*` metrics include a label per entity, which can balloon. The `filter:` in step 2 keeps it sane.
-- **Scrape security** — node_exporter and HA's metrics endpoint are unauthenticated on LAN. Acceptable for an internal homelab; fix with mTLS or a reverse proxy if exposing externally.
+For HA's own state in Prometheus: enable the built-in `prometheus:` integration in `configuration.yaml`, generate a long-lived access token, and add HA as a scrape target with the bearer token.
