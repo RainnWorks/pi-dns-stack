@@ -11,10 +11,10 @@
   # ad-blocking + local-domain template as everyone else on the LAN.
   networking.nameservers = [ "127.0.0.1" ];
 
-  # Open DNS + AdGuard UI ports. Combined with base.nix's [22] this becomes
-  # [22 53 3000] via NixOS list-merge.
+  # Open DNS + AdGuard UI + CoreDNS metrics ports. Combined with base.nix's
+  # [22] and observability.nix's [9100] this becomes [22 53 3000 9100 9153].
   networking.firewall = {
-    allowedTCPPorts = [ 53 3000 ];
+    allowedTCPPorts = [ 53 3000 9153 ];
     allowedUDPPorts = [ 53 ];
   };
 

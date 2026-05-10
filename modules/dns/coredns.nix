@@ -1,4 +1,4 @@
-{ pkgs, cfg, ... }:
+{ config, pkgs, cfg, ... }:
 
 {
   environment.etc."coredns/Corefile".text = ''
@@ -15,6 +15,7 @@ ${cfg.domain}:53 {
     forward . 127.0.0.1:5353
     cache 300
     errors
+    prometheus :9153
 }
   '';
 
@@ -25,6 +26,10 @@ ${cfg.domain}:53 {
   systemd.services.coredns = {
     after = [ "adguardhome.service" ];
     wants = [ "adguardhome.service" ];
+    # Force a restart when the Corefile changes (NixOS otherwise only
+    # restarts services whose unit definitions change, not their external
+    # config files).
+    restartTriggers = [ config.environment.etc."coredns/Corefile".source ];
   };
 
   systemd.services.coredns.serviceConfig = {
