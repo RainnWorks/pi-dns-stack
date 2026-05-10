@@ -43,7 +43,7 @@
       # target to avoid one quiet track followed by an ear-blast.
       volume_normalisation = true;
       # First-connect default — spotifyd has no cached volume yet, so
-      # without this it boots at 100%.
+      # without this it boots at 100%. Hosts can override per-room.
       initial_volume = 30;
       # Hardware-agnostic default: software volume control. Hardware modules
       # override to "alsa_linear" + their device's mixer/control if they

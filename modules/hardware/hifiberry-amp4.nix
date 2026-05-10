@@ -38,18 +38,40 @@ in
     "snd_soc_pcm512x_i2c"
   ];
 
-  # Default ALSA to the HiFiBerry by card name so it's stable across boots
-  # (numeric card IDs depend on probe order — onboard audio still ends up
-  # as card0, USB audio as card2, etc.). Music Assistant's builtin player
-  # opens the default ALSA device.
+  # Default ALSA to the HiFiBerry by card name (stable across boots — numeric
+  # card IDs depend on probe order, with onboard audio at card0 and USB audio
+  # at card2). The `softvol` layer in front of the hardware bounds the dB
+  # range so apps see a slider that's actually usable across its full travel:
+  #
+  #   slider 0%  → -45 dB (very quiet but audible)
+  #   slider 50% → softvol log-mapped (rough background-music level)
+  #   slider 100% → -10 dB (loud, not ear-melting)
+  #
+  # The PCM5121's Digital control alone has the *full* hardware range
+  # (-103.5 dB to 0 dB), which on this amp+speaker combo gives a slider where
+  # most of the useful range is squashed into a few percentage points at one
+  # end — either way you cut it (linear or log curve). HiFiBerryOS uses this
+  # same softvol pattern; we replicate it. Tweak min_dB / max_dB if your
+  # speakers + listening environment want a different window.
   environment.etc."asound.conf".text = ''
     pcm.!default {
-      type plug
-      slave.pcm "hw:sndrpihifiberry,0"
+        type plug
+        slave.pcm "softvol_out"
     }
+
+    pcm.softvol_out {
+        type softvol
+        slave.pcm "hw:CARD=sndrpihifiberry,0"
+        control.name "SoftMaster"
+        control.card sndrpihifiberry
+        min_dB -45.0
+        max_dB -10.0
+        resolution 256
+    }
+
     ctl.!default {
-      type hw
-      card "sndrpihifiberry"
+        type hw
+        card sndrpihifiberry
     }
   '';
 
@@ -60,13 +82,13 @@ in
   # override audio module mkDefault fallbacks; hosts can still override
   # these via lib.mkForce if needed.
   #
-  # PCM5121 has a hardware Digital mixer with 207 steps and 0.5dB resolution
-  # — better SNR than software volume, and saves a tiny bit of CPU. Linear
-  # scaling is also gentler on the Amp4 (logarithmic ALSA mapping plus a
-  # 30W amp = ear-blast on the bottom 5% of the slider).
+  # spotifyd writes to the SoftMaster control above (not the raw Digital
+  # control), so its slider 0–100% maps linearly into the constrained
+  # dB window. alsa_linear keeps the mapping predictable; softvol itself
+  # supplies the log curve internally.
   services.spotifyd.settings.global = {
     volume_controller = "alsa_linear";
     mixer = "hw:CARD=sndrpihifiberry";
-    control = "Digital";
+    control = "SoftMaster";
   };
 }
