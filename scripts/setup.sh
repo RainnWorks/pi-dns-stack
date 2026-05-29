@@ -11,9 +11,11 @@ else
 fi
 
 echo "Installing dependencies..."
+# git is required by Nix to evaluate the flake (git+file://); xz-utils for the
+# SD image build.
 orb run -m "$VM_NAME" -u root bash -c "
   apt-get update -qq
-  apt-get install -y -qq xz-utils
+  apt-get install -y -qq xz-utils git
 "
 
 if orb run -m "$VM_NAME" bash -c "test -d /nix"; then
