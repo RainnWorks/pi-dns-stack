@@ -11,11 +11,6 @@
       dns = {
         bind_hosts = [ "127.0.0.1" ];
         port = 5353;
-        # Return NXDOMAIN for blocked domains instead of the default 0.0.0.0.
-        # A 0.0.0.0 answer makes clients try to connect to 0.0.0.0 and hang;
-        # NXDOMAIN ("not found") lets them fail cleanly and move on. This is
-        # what kept the Bambu printer's cloud handshake from stalling.
-        blocking_mode = "nxdomain";
         upstream_dns = [ "127.0.0.1:5335" ];
         bootstrap_dns = [];
         fallback_dns = [];
@@ -32,6 +27,12 @@
         parental_enabled = false;
         safebrowsing_enabled = false;
         safesearch_enabled = false;
+        # Return NXDOMAIN for blocked domains instead of the default 0.0.0.0.
+        # A 0.0.0.0 answer makes clients try to connect to 0.0.0.0 and hang;
+        # NXDOMAIN ("not found") lets them fail cleanly and move on.
+        # NB: in AdGuard Home (schema 29) this key lives under `filtering`,
+        # not `dns` — putting it under `dns` is silently dropped on load.
+        blocking_mode = "nxdomain";
       };
       querylog = {
         enabled = true;
