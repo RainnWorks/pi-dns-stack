@@ -137,13 +137,11 @@
     '';
   };
 
-  # AdGuard's working dir is /var/lib/AdGuardHome (capitalised — set by the
-  # service's systemd StateDirectory). Mount the ephemeral tmpfs on that exact
-  # path; an earlier lowercase "adguardhome" typo meant the tmpfs covered a
-  # path nothing used and AdGuard's state quietly lived on the SD card.
-  fileSystems."/var/lib/AdGuardHome" = {
-    device = "tmpfs";
-    fsType = "tmpfs";
-    options = [ "mode=0755" "size=64m" ];
-  };
+  # AdGuard's working dir intentionally persists on the SD card (no tmpfs).
+  # The high-churn writers — query log and statistics — are already disabled
+  # above, so on-disk writes are just the ~daily filter-list refresh and the
+  # occasional config rewrite: negligible wear. Persisting matters because the
+  # filter lists then survive reboots; a RAM-backed dir would force a full
+  # re-download on every boot, opening a fail-open window and breaking blocking
+  # whenever a list's source is unreachable (e.g. OISD's IPv4 timing out).
 }
