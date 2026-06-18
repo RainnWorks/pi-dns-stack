@@ -11,6 +11,11 @@
       dns = {
         bind_hosts = [ "127.0.0.1" ];
         port = 5353;
+        # Return NXDOMAIN for blocked domains instead of the default 0.0.0.0.
+        # A 0.0.0.0 answer makes clients try to connect to 0.0.0.0 and hang;
+        # NXDOMAIN ("not found") lets them fail cleanly and move on. This is
+        # what kept the Bambu printer's cloud handshake from stalling.
+        blocking_mode = "nxdomain";
         upstream_dns = [ "127.0.0.1:5335" ];
         bootstrap_dns = [];
         fallback_dns = [];
@@ -85,6 +90,11 @@
         "@@||codeium.com^"
         "@@||windsurf.com^"
         "@@||codeiumdata.com^"
+        # Bambu Lab printer cloud event/telemetry endpoint. A blocklist
+        # (OISD/AdGuard) flags it as tracking, but the printer's cloud-connect
+        # handshake reports device events here; a 0.0.0.0 block answer stalls
+        # the connection and the printer drops offline. Allowlist so it resolves.
+        "@@||event.bblmw.com^$important"
       ];
       dhcp.enabled = false;
     };
