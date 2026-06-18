@@ -137,7 +137,11 @@
     '';
   };
 
-  fileSystems."/var/lib/adguardhome" = {
+  # AdGuard's working dir is /var/lib/AdGuardHome (capitalised — set by the
+  # service's systemd StateDirectory). Mount the ephemeral tmpfs on that exact
+  # path; an earlier lowercase "adguardhome" typo meant the tmpfs covered a
+  # path nothing used and AdGuard's state quietly lived on the SD card.
+  fileSystems."/var/lib/AdGuardHome" = {
     device = "tmpfs";
     fsType = "tmpfs";
     options = [ "mode=0755" "size=64m" ];
