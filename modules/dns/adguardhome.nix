@@ -27,6 +27,12 @@
         parental_enabled = false;
         safebrowsing_enabled = false;
         safesearch_enabled = false;
+        # Return NXDOMAIN for blocked domains instead of the default 0.0.0.0.
+        # A 0.0.0.0 answer makes clients try to connect to 0.0.0.0 and hang;
+        # NXDOMAIN ("not found") lets them fail cleanly and move on.
+        # NB: in AdGuard Home (schema 29) this key lives under `filtering`,
+        # not `dns` — putting it under `dns` is silently dropped on load.
+        blocking_mode = "nxdomain";
       };
       querylog = {
         enabled = true;
@@ -85,6 +91,11 @@
         "@@||codeium.com^"
         "@@||windsurf.com^"
         "@@||codeiumdata.com^"
+        # Bambu Lab printer cloud event/telemetry endpoint. A blocklist
+        # (OISD/AdGuard) flags it as tracking, but the printer's cloud-connect
+        # handshake reports device events here; a 0.0.0.0 block answer stalls
+        # the connection and the printer drops offline. Allowlist so it resolves.
+        "@@||event.bblmw.com^$important"
       ];
       dhcp.enabled = false;
     };
@@ -126,9 +137,11 @@
     '';
   };
 
-  fileSystems."/var/lib/adguardhome" = {
-    device = "tmpfs";
-    fsType = "tmpfs";
-    options = [ "mode=0755" "size=64m" ];
-  };
+  # AdGuard's working dir intentionally persists on the SD card (no tmpfs).
+  # The high-churn writers — query log and statistics — are already disabled
+  # above, so on-disk writes are just the ~daily filter-list refresh and the
+  # occasional config rewrite: negligible wear. Persisting matters because the
+  # filter lists then survive reboots; a RAM-backed dir would force a full
+  # re-download on every boot, opening a fail-open window and breaking blocking
+  # whenever a list's source is unreachable (e.g. OISD's IPv4 timing out).
 }

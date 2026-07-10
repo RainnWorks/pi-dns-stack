@@ -1,6 +1,18 @@
 { config, pkgs, cfg, ... }:
 
 {
+  # CoreDNS is the front door, so it is the only hop that sees real client
+  # IPs (AdGuard, behind the forward, only ever sees 127.0.0.1). The `log`
+  # plugin above records client_ip -> qname -> rcode for per-device DNS
+  # debugging. To keep this off the SD card, CoreDNS logs into its own
+  # volatile (RAM-backed) journald namespace, bounded to 16M. Read it with:
+  #   journalctl --namespace=coredns -f
+  environment.etc."systemd/journald@coredns.conf".text = ''
+    [Journal]
+    Storage=volatile
+    RuntimeMaxUse=16M
+  '';
+
   environment.etc."coredns/Corefile".text = ''
 ${cfg.domain}:53 {
     # Wildcard A: *.${cfg.domain} resolves to the homelab server, so local
@@ -15,12 +27,14 @@ ${cfg.domain}:53 {
         fallthrough
     }
     forward . 127.0.0.1:5353
+    log
     errors
     cache 60
 }
 
 .:53 {
     forward . 127.0.0.1:5353
+    log
     cache 300
     errors
     prometheus :9153
@@ -46,5 +60,7 @@ ${cfg.domain}:53 {
       "${pkgs.coredns}/bin/coredns -conf /etc/coredns/Corefile"
     ];
     MemoryMax = "64M";
+    # Route query logs into the RAM-backed journald namespace above.
+    LogNamespace = "coredns";
   };
 }
