@@ -5,6 +5,7 @@
     ./unbound.nix
     ./adguardhome.nix
     ./coredns.nix
+    ./flush-api.nix
   ];
 
   # Resolve own queries via local CoreDNS so the Pi itself sees the same
