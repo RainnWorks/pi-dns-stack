@@ -78,6 +78,39 @@ in
   # Let interactive logins (e.g. `aplay`, `speaker-test`) reach /dev/snd.
   users.users.tom.extraGroups = [ "audio" ];
 
+  # For debugging the mixer over SSH (amixer/alsamixer/aplay).
+  environment.systemPackages = [ pkgs.alsa-utils ];
+
+  # The SoftMaster softvol control is a lazily-created ALSA user control: it
+  # only exists once something has played through the softvol PCM, and then
+  # persists until reboot. spotifyd looks it up on every volume change and,
+  # early after boot, races the creation — its slider writes fail with
+  # "No control with name 'SoftMaster'" and audio runs at full hardware
+  # volume with a dead slider. Create the control before the players start
+  # by pushing a moment of silence through the chain, then park it at a
+  # safe level for whatever plays first.
+  systemd.services.softvol-init = {
+    description = "Instantiate SoftMaster softvol control before audio players start";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "sound.target" "systemd-udev-settle.service" ];
+    before = [ "spotifyd.service" "shairport-sync.service" ];
+    path = [ pkgs.alsa-utils ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      # The card can appear a beat after sound.target on slow boots.
+      for i in $(seq 1 10); do
+        [ -e /proc/asound/sndrpihifiberry ] && break
+        sleep 1
+      done
+      # Opening the default (plug -> softvol) PCM creates the control.
+      aplay -D default -t raw -f S16_LE -r 48000 -c 2 -d 1 /dev/zero || true
+      amixer -c sndrpihifiberry sset SoftMaster 40% || true
+    '';
+  };
+
   # Audio-stack settings specific to this HAT. Plain (non-mkDefault) values
   # override audio module mkDefault fallbacks; hosts can still override
   # these via lib.mkForce if needed.
